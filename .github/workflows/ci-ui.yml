@@ -5,9 +5,14 @@ on:
     branches: [main]
     paths: [ui/**]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   ci:
     uses: ./.github/workflows/ci-build-push.yml
     with:
       service: ui
       ecr_repository: gleamgoods/ui
+    secrets: inherit

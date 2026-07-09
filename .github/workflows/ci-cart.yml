@@ -5,9 +5,14 @@ on:
     branches: [main]
     paths: [cart/**]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   ci:
     uses: ./.github/workflows/ci-build-push.yml
     with:
       service: cart
       ecr_repository: gleamgoods/cart
+    secrets: inherit
