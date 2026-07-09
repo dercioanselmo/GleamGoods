@@ -1,0 +1,13 @@
+name: CI - Cart
+
+on:
+  push:
+    branches: [main]
+    paths: [cart/**]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-build-push.yml
+    with:
+      service: cart
+      ecr_repository: gleamgoods/cart

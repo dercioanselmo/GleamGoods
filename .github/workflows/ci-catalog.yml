@@ -1,0 +1,13 @@
+name: CI - Catalog
+
+on:
+  push:
+    branches: [main]
+    paths: [catalog/**]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-build-push.yml
+    with:
+      service: catalog
+      ecr_repository: gleamgoods/catalog

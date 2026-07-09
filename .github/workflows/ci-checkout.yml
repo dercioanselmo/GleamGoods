@@ -1,0 +1,13 @@
+name: CI - Checkout
+
+on:
+  push:
+    branches: [main]
+    paths: [checkout/**]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-build-push.yml
+    with:
+      service: checkout
+      ecr_repository: gleamgoods/checkout

@@ -1,0 +1,13 @@
+name: CI - Orders
+
+on:
+  push:
+    branches: [main]
+    paths: [orders/**]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-build-push.yml
+    with:
+      service: orders
+      ecr_repository: gleamgoods/orders

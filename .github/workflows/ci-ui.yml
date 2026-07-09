@@ -1,0 +1,13 @@
+name: CI - UI
+
+on:
+  push:
+    branches: [main]
+    paths: [ui/**]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-build-push.yml
+    with:
+      service: ui
+      ecr_repository: gleamgoods/ui
