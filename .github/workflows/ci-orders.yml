@@ -2,6 +2,8 @@ name: CI - Orders
 
 on:
   push:
+    branches: [main]
+    paths: [orders/**]
     tags: ["orders/v*"]
 
 permissions:

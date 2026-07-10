@@ -2,6 +2,8 @@ name: CI - Cart
 
 on:
   push:
+    branches: [main]
+    paths: [cart/**]
     tags: ["cart/v*"]
 
 permissions:
