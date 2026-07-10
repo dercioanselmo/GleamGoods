@@ -2,8 +2,7 @@ name: CI - UI
 
 on:
   push:
-    branches: [main]
-    paths: [ui/**]
+    tags: ["ui/v*"]
 
 permissions:
   id-token: write

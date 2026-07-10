@@ -2,8 +2,7 @@ name: CI - Checkout
 
 on:
   push:
-    branches: [main]
-    paths: [checkout/**]
+    tags: ["checkout/v*"]
 
 permissions:
   id-token: write

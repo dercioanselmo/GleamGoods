@@ -2,8 +2,7 @@ name: CI - Catalog
 
 on:
   push:
-    branches: [main]
-    paths: [catalog/**]
+    tags: ["catalog/v*"]
 
 permissions:
   id-token: write
