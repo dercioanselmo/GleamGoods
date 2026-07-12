@@ -1,0 +1,94 @@
+# ============================================================================
+# CHECKOUT SERVICE - CUSTOM VALUES
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# IMAGE CONFIGURATION
+# ----------------------------------------------------------------------------
+image:
+  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/retail-store/checkout
+  pullPolicy: IfNotPresent
+  tag: sha-204dcd8
+
+# ----------------------------------------------------------------------------
+# DATABASE CONFIGURATION
+# ----------------------------------------------------------------------------
+redis:
+  create: false  # Using external AWS ElastiCache Redis
+
+app:
+  persistence:
+    provider: redis
+    redis:
+      endpoint: retail-dev-checkout-redis.ai01ey.0001.use1.cache.amazonaws.com:6379
+
+  endpoints:
+    orders: http://orders  # Orders service endpoint (ClusterIP service name)
+
+# ----------------------------------------------------------------------------
+# RESOURCE MANAGEMENT
+# ----------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+# ----------------------------------------------------------------------------
+# AUTOSCALING - HORIZONTAL POD AUTOSCALER (HPA)
+# ----------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# ----------------------------------------------------------------------------
+# KARPENTER NODE SELECTION
+# ----------------------------------------------------------------------------
+# Schedule pods on Karpenter On-Demand nodes for stability
+nodeSelector:
+  karpenter.sh/capacity-type: spot
+
+# ----------------------------------------------------------------------------
+# TOPOLOGY SPREAD CONSTRAINTS
+# ----------------------------------------------------------------------------
+# Distribute pods across nodes AND availability zones for high availability
+topologySpreadConstraints:
+  # Spread across nodes (within same AZ) - Best effort
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: checkout
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: checkout
+  
+  # Spread across availability zones - Strict requirement
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: checkout
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: checkout
+
+# ----------------------------------------------------------------------------
+# POD DISRUPTION BUDGET (PDB)
+# ----------------------------------------------------------------------------
+# Maintain minimum availability during voluntary disruptions (node drains, etc.)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2      # At least 2 pods must remain available
+  maxUnavailable: 0    # Disable maxUnavailable (only minAvailable active)
+
+
+opentelemetry:
+  enabled: true
+  instrumentation: "default-instrumentation"  

@@ -1,0 +1,28 @@
+{{- if .Values.configMap.create -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "carts.configMapName" . }}
+data:
+  RETAIL_CART_PERSISTENCE_PROVIDER: {{ .Values.app.persistence.provider }}
+  {{- if (eq "dynamodb" .Values.app.persistence.provider) }}
+  RETAIL_CART_PERSISTENCE_DYNAMODB_TABLE_NAME: {{ .Values.app.persistence.dynamodb.tableName }}
+  {{- if .Values.dynamodb.create }}
+  # Local DynamoDB (for development/testing)
+  RETAIL_CART_PERSISTENCE_DYNAMODB_CREATE_TABLE: "true"
+  AWS_ACCESS_KEY_ID: key
+  AWS_SECRET_ACCESS_KEY: secret
+  RETAIL_CART_PERSISTENCE_DYNAMODB_ENDPOINT: http://{{ include "carts.dynamodb.fullname" . }}:{{ .Values.dynamodb.service.port }}
+  {{- else }}
+  # External AWS DynamoDB
+  RETAIL_CART_PERSISTENCE_DYNAMODB_CREATE_TABLE: "{{ .Values.app.persistence.dynamodb.createTable }}"
+  {{- if .Values.app.persistence.dynamodb.endpoint }}
+  RETAIL_CART_PERSISTENCE_DYNAMODB_ENDPOINT: {{ .Values.app.persistence.dynamodb.endpoint }}
+  {{- end }}
+  {{- if .Values.app.persistence.dynamodb.region }}
+  AWS_REGION: {{ .Values.app.persistence.dynamodb.region }}
+  AWS_DEFAULT_REGION: {{ .Values.app.persistence.dynamodb.region }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+{{- end }}

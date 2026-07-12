@@ -1,0 +1,112 @@
+# ============================================================================
+# UI SERVICE - CUSTOM VALUES
+# ============================================================================
+ 
+# ----------------------------------------------------------------------------
+# IMAGE CONFIGURATION
+# ----------------------------------------------------------------------------
+image: 
+  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/gleamgoods/ui
+  pullPolicy: IfNotPresent
+  tag: latest
+
+# ----------------------------------------------------------------------------
+# APPLICATION CONFIGURATION
+# ----------------------------------------------------------------------------
+app:
+  theme: green  # Options: orange, default, green, teal
+  
+  endpoints:
+    catalog: http://catalog:80
+    carts: http://carts:80
+    checkout: http://checkout:80
+    orders: http://orders:80
+
+  chat:
+    enabled: false  # Not using AI chat features
+
+# ----------------------------------------------------------------------------
+# INGRESS CONFIGURATION - AWS ALB
+# ----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/liveness
+
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:652978908369:certificate/c28575fd-acdb-4c46-9f63-0fba7c06556d
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    # External DNS Annotation
+    external-dns.alpha.kubernetes.io/hostname: retailstore4.dercioanselmo.com
+  tls: []
+  hosts:
+    - retailstore4.dercioanselmo.com
+
+# ----------------------------------------------------------------------------
+# RESOURCE MANAGEMENT
+# ----------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: 512m
+    memory: 512Mi
+  requests:
+    cpu: 256m
+    memory: 512Mi
+
+# ----------------------------------------------------------------------------
+# AUTOSCALING - HORIZONTAL POD AUTOSCALER (HPA)
+# ----------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+# ----------------------------------------------------------------------------
+# KARPENTER NODE SELECTION
+# ----------------------------------------------------------------------------
+# Schedule pods on Karpenter On-Demand nodes for stability
+nodeSelector:
+  karpenter.sh/capacity-type: spot
+
+# ----------------------------------------------------------------------------
+# TOPOLOGY SPREAD CONSTRAINTS
+# ----------------------------------------------------------------------------
+# Distribute pods across nodes AND availability zones for high availability
+topologySpreadConstraints:
+  # Spread across nodes (within same AZ) - Best effort
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: ui
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: ui
+  
+  # Spread across availability zones - Strict requirement
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: ui
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: ui
+
+# ----------------------------------------------------------------------------
+# POD DISRUPTION BUDGET (PDB)
+# ----------------------------------------------------------------------------
+# Maintain minimum availability during voluntary disruptions (node drains, etc.)
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 2      # At least 2 pods must remain available
+  maxUnavailable: 0    # Disable maxUnavailable (only minAvailable active)
+
+
+opentelemetry:
+  enabled: true
+  instrumentation: "default-instrumentation"  

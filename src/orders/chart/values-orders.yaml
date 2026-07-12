@@ -1,0 +1,121 @@
+# ============================================================================
+# ORDERS SERVICE - PRODUCTION CUSTOM VALUES WITH SECRETS MANAGER
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# IMAGE CONFIGURATION
+# ----------------------------------------------------------------------------
+image:
+  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/retail-store/orders
+  pullPolicy: IfNotPresent
+  tag: sha-d35da60
+
+# ----------------------------------------------------------------------------
+# DATABASE CONFIGURATION - AWS RDS PostgreSQL with Secrets Manager
+# ----------------------------------------------------------------------------
+postgresql:
+  create: false  # Using external AWS RDS PostgreSQL
+
+app:
+  persistence:
+    provider: postgres
+    endpoint: orders-postgres-db.cs1824wy44gd.us-east-1.rds.amazonaws.com:5432
+    database: ordersdb
+
+    secret:
+      create: false  # CRITICAL: Don't create static secret when using Secrets Manager
+      name: orders-db
+      username: ""  # Not used when useSecretsManager=true
+      password: ""  # Not used when useSecretsManager=true
+      
+      # Enable AWS Secrets Manager integration
+      useSecretsManager: true  # Enable Secrets Manager
+      secretsManager:
+        secretName: "retailstore-db-secret-1"  # AWS Secrets Manager secret name
+        region: "us-east-1"  # AWS region
+
+  # ----------------------------------------------------------------------------
+  # MESSAGING CONFIGURATION - AWS SQS
+  # ----------------------------------------------------------------------------
+  messaging:
+    provider: sqs
+    sqs:
+      queueName: retail-dev-orders-queue
+
+    rabbitmq:
+      addresses: []
+      secret:
+        create: false  # Not using RabbitMQ
+
+# ----------------------------------------------------------------------------
+# RABBITMQ (DISABLED)
+# ----------------------------------------------------------------------------
+rabbitmq:
+  create: false  # Using AWS SQS instead
+
+# ----------------------------------------------------------------------------
+# RESOURCE MANAGEMENT
+# ----------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: 512m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 500Mi
+# ----------------------------------------------------------------------------
+# AUTOSCALING - HORIZONTAL POD AUTOSCALER (HPA)
+# ----------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# ----------------------------------------------------------------------------
+# KARPENTER NODE SELECTION
+# ----------------------------------------------------------------------------
+# Schedule pods on Karpenter On-Demand nodes for stability
+nodeSelector:
+  karpenter.sh/capacity-type: spot
+
+# ----------------------------------------------------------------------------
+# TOPOLOGY SPREAD CONSTRAINTS
+# ----------------------------------------------------------------------------
+# Distribute pods across nodes AND availability zones for high availability
+topologySpreadConstraints:
+  # Spread across nodes (within same AZ) - Best effort
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: orders
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: orders
+  
+  # Spread across availability zones - Strict requirement
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: orders
+        app.kubernetes.io/component: service
+        app.kubernetes.io/instance: orders
+
+# ----------------------------------------------------------------------------
+# POD DISRUPTION BUDGET (PDB) 
+# ----------------------------------------------------------------------------
+# Maintain minimum availability during voluntary disruptions (node drains, etc.)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2      # At least 2 pods must remain available
+  maxUnavailable: 0    # Disable maxUnavailable (only minAvailable active)
+
+
+opentelemetry:
+  enabled: true
+  instrumentation: "default-instrumentation"  

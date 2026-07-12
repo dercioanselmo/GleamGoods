@@ -1,0 +1,77 @@
+name: Build and Push Orders Service to ECR
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "src/orders/src/**"
+      #- ".github/workflows/build-push-orders.yaml" # During testing phases only for prod comment this line
+
+permissions:
+  id-token: write # Needed for OIDC
+  contents: write # Needed to push commits
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: gleamgoods/orders
+
+jobs:
+  build-and-push-orders:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::564956047797:role/github-actions-oidc-role-ui
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Define image tags
+        id: vars
+        run: |
+          SHA_TAG=sha-${GITHUB_SHA::7}
+          IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+          echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
+          echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
+          echo "Using tags: latest and $SHA_TAG"
+          echo "latest = convenience tag for testing"
+          echo "$SHA_TAG = immutable tag used in Helm values"
+
+      - name: Build and push Docker images
+        run: |
+          for tag in $TAGS; do
+            IMAGE_URI="$IMAGE_BASE:$tag"
+            echo "Building and pushing $IMAGE_URI"
+            docker build -t $IMAGE_URI src/orders
+            docker push $IMAGE_URI
+          done
+
+      - name: Setup Git auth using GITHUB_TOKEN
+        run: |
+          git config --global user.name "ci-bot"
+          git config --global user.email "dercio.anselmo@gmail.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Update Helm values file with new image tag
+        run: |
+          cd src/orders
+          git config user.name "ci-bot"
+          git config user.email "dercio.anselmo@gmail.com"
+          sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-orders.yaml
+          git diff --quiet || (
+            git add chart/values-orders.yaml
+            git commit -m "Update orders image tag to sha-${GITHUB_SHA::7}"
+            git push origin main
+          )
+
+      - name: CI Complete
+        run: |
+          echo "Image push and Git update done"
+          echo "Tags used: $TAGS"
