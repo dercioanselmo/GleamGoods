@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - "src/cart/src/**"
-      #- ".github/workflows/build-push-cart.yaml" # During testing phases only for prod comment this line
+      # - ".github/workflows/build-push-cart.yaml" # During testing phases only for prod comment this line
 
 permissions:
   id-token: write # Needed for OIDC
@@ -38,22 +38,32 @@ jobs:
         run: |
           SHA_TAG=sha-${GITHUB_SHA::7}
           IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+          
           echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
-          echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
+          echo "SHA_TAG=$SHA_TAG" >> $GITHUB_OUTPUT
           echo "Using tags: latest and $SHA_TAG"
           echo "latest = convenience tag for testing"
           echo "$SHA_TAG = immutable tag used in Helm values"
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Docker images
-        run: |
-          for tag in $TAGS; do
-            IMAGE_URI="$IMAGE_BASE:$tag"
-            echo "Building and pushing $IMAGE_URI"
-            docker build -t $IMAGE_URI src/cart
-            docker push $IMAGE_URI
-          done
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/cart
+          file: ./src/cart/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}:latest
+            ${{ env.IMAGE_BASE }}:${{ steps.vars.outputs.SHA_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Optional: Better cache isolation
+          # cache-from: type=gha,scope=cart-service
+          # cache-to: type=gha,scope=cart-service,mode=max
 
       - name: CI Complete
         run: |
-          echo "Image push and Git update done"
-          echo "Tags used: $TAGS"
+          echo "✅ Image push completed successfully"
+          echo "Tags used: latest and ${{ steps.vars.outputs.SHA_TAG }}"
