@@ -9,7 +9,7 @@
 image:
   repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/retail-store/checkout
   pullPolicy: IfNotPresent
-  tag: sha-204dcd8
+  tag: sha-8dbabd5
 
 # ----------------------------------------------------------------------------
 # DATABASE CONFIGURATION
