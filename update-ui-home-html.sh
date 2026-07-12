@@ -11,7 +11,7 @@ fi
 VERSION=$(echo "$1" | tr '[:lower:]' '[:upper:]')
 
 # File to update
-HOME_HTML="ui/src/main/resources/templates/home.html"
+HOME_HTML="src/ui/src/main/resources/templates/home.html"
 
 echo "Updating version to $VERSION..."
 
