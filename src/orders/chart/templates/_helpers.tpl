@@ -50,7 +50,7 @@ Selector labels
 app.kubernetes.io/name: {{ include "orders.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: service
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}
 
 {{/*
@@ -109,7 +109,7 @@ Selector labels for postgresql
 app.kubernetes.io/name: {{ include "orders.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: postgresql
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}
 
 {{- define "getOrGeneratePass" }}
@@ -163,7 +163,7 @@ Selector labels for rabbitmq
 app.kubernetes.io/name: {{ include "orders.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: rabbitmq
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}
 
 {{- define "orders.rabbitmq.addresses" -}}

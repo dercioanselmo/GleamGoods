@@ -7,7 +7,7 @@ spec:
   hosts:
   - "*"
   gateways:
-  - retail-store-sample
+  - glramgoods
   http:
   - match:
     - uri:

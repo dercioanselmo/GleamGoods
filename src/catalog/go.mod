@@ -1,4 +1,4 @@
-module github.com/aws-containers/retail-store-sample-app/catalog
+module github.com/aws-containers/glramgoods-app/catalog
 
 go 1.23.0
 

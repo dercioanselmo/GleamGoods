@@ -7,13 +7,13 @@ This Helm chart deploys the UI component of the application.
 To install the chart:
 
 ```bash
-helm install ui oci://public.ecr.aws/aws-containers/retail-store-sample-ui-chart:0.8.5
+helm install ui oci://public.ecr.aws/aws-containers/glramgoods-ui-chart:0.8.5
 ```
 
 To install with custom values:
 
 ```bash
-helm install ui oci://public.ecr.aws/aws-containers/retail-store-sample-ui-chart:0.8.5 --values custom-values.yaml
+helm install ui oci://public.ecr.aws/aws-containers/glramgoods-ui-chart:0.8.5 --values custom-values.yaml
 ```
 
 ## Configuration
@@ -23,7 +23,7 @@ The following table lists the configurable parameters of the UI chart and their 
 | Parameter                                  | Description                                     | Default                                                                                              |
 | ------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | replicaCount                               | Number of UI pods to run                        | 1                                                                                                    |
-| image.repository                           | UI image repository                             | public.ecr.aws/aws-containers/retail-store-sample-ui                                                 |
+| image.repository                           | UI image repository                             | public.ecr.aws/aws-containers/glramgoods-ui                                                 |
 | image.pullPolicy                           | Image pull policy                               | IfNotPresent                                                                                         |
 | image.tag                                  | Image tag                                       | -                                                                                                    |
 | imagePullSecrets                           | Image pull secrets                              | []                                                                                                   |

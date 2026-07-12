@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: public.ecr.aws/aws-containers/retail-store-sample-cart
+  repository: public.ecr.aws/aws-containers/glramgoods-cart
   pullPolicy: IfNotPresent
   tag: 
 

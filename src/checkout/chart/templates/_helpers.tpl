@@ -50,7 +50,7 @@ Selector labels
 app.kubernetes.io/name: {{ include "checkout.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: service
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}
 
 {{/*
@@ -109,5 +109,5 @@ Selector labels for redis
 app.kubernetes.io/name: {{ include "checkout.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: redis
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}

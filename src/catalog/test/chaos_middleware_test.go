@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aws-containers/retail-store-sample-app/catalog/middleware"
+	"github.com/aws-containers/glramgoods-app/catalog/middleware"
 )
 
 func setupTestRouter() (*gin.Engine, *middleware.ChaosController) {

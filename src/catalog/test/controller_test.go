@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aws-containers/retail-store-sample-app/catalog/model"
+	"github.com/aws-containers/glramgoods-app/catalog/model"
 )
 
 func TestCatalogList(t *testing.T) {

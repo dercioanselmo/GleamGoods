@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: public.ecr.aws/aws-containers/retail-store-sample-orders
+  repository: public.ecr.aws/aws-containers/glramgoods-orders
   pullPolicy: IfNotPresent
   tag: 
 

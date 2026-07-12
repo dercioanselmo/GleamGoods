@@ -50,7 +50,7 @@ Selector labels
 app.kubernetes.io/name: {{ include "catalog.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: service
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}
 
 {{/*
@@ -109,7 +109,7 @@ Selector labels for mysql
 app.kubernetes.io/name: {{ include "catalog.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: mysql
-app.kubernetes.io/owner: retail-store-sample
+app.kubernetes.io/owner: glramgoods
 {{- end }}
 
 {{- define "getOrGeneratePass" }}

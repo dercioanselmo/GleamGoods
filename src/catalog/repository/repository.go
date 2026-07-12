@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws-containers/retail-store-sample-app/catalog/config"
-	"github.com/aws-containers/retail-store-sample-app/catalog/model"
+	"github.com/aws-containers/glramgoods-app/catalog/config"
+	"github.com/aws-containers/glramgoods-app/catalog/model"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
