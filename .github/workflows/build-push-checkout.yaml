@@ -53,6 +53,26 @@ jobs:
             docker push $IMAGE_URI
           done
 
+
+      - name: Setup Git auth using GITHUB_TOKEN
+        run: |
+          git config --global user.name "ci-bot"
+          git config --global user.email "dercio.anselmo@gmail.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Update Helm values file with new image tag
+        run: |
+          cd src/ui
+          git config user.name "ci-bot"
+          git config user.email "dercio.anselmo@gmail.com"
+          sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
+          git diff --quiet || (
+            git add chart/values-ui.yaml
+            git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
+            git push origin main
+          )
+
+
       - name: CI Complete
         run: |
           echo "Image push and Git update done"
