@@ -1,14 +1,14 @@
 # ============================================================================
 # UI SERVICE - CUSTOM VALUES
 # ============================================================================
- 
+
 # ----------------------------------------------------------------------------
 # IMAGE CONFIGURATION
 # ----------------------------------------------------------------------------
 image: 
   repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/gleamgoods/ui
   pullPolicy: IfNotPresent
-  tag: sha-0870b0e
+  tag: latest
 
 # ----------------------------------------------------------------------------
 # APPLICATION CONFIGURATION
@@ -36,14 +36,14 @@ ingress:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/liveness
 
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:652978908369:certificate/c28575fd-acdb-4c46-9f63-0fba7c06556d
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564956047797:certificate/e27fa43e-60e8-4b71-ae4e-95e7e7cd3b46
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443},{"HTTP": 80}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
     # External DNS Annotation
-    external-dns.alpha.kubernetes.io/hostname: retailstore4.dercioanselmo.com
+    external-dns.alpha.kubernetes.io/hostname: gleamgoods.dercioanselmo.com
   tls: []
   hosts:
-    - retailstore4.dercioanselmo.com
+    - gleamgoods.dercioanselmo.com
 
 # ----------------------------------------------------------------------------
 # RESOURCE MANAGEMENT
@@ -61,7 +61,7 @@ resources:
 # ----------------------------------------------------------------------------
 autoscaling:
   enabled: true
-  minReplicas: 1
+  minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
 

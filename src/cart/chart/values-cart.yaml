@@ -6,9 +6,9 @@
 # IMAGE CONFIGURATION
 # ----------------------------------------------------------------------------
 image:
-  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/retail-store/cart
+  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/gleamgoods/cart
   pullPolicy: IfNotPresent
-  tag: sha-3d36026
+  tag: latest
 
 # ----------------------------------------------------------------------------
 # DATABASE CONFIGURATION
@@ -100,7 +100,7 @@ serviceAccount:
   create: true                    # Let Helm create it
   name: carts                     # Force the name to "carts"
   annotations:
-    eks.amazonaws.com/role-arn: "arn:aws:iam::652978908369:role/arn:aws:iam::652978908369:role/retail-dev-cart-dynamodb-role"   # ← VERY IMPORTANT
+    eks.amazonaws.com/role-arn: "arn:aws:iam::564956047797:role/retail-gleamgoods-cart-dynamodb-role"   # ← VERY IMPORTANT
 
 # Force serviceAccountName in the Deployment
 fullnameOverride: ""              # Optional - prevents "cart-carts"

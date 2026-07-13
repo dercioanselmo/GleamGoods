@@ -1,6 +1,6 @@
 # GleamGoods
 
-A microservices-based retail store application. Each service is independently deployable and communicates via APIs.
+A microservices-based GleamGoods application. Each service is independently deployable and communicates via APIs.
 
 ## Services
 

@@ -7,9 +7,9 @@
 # IMAGE CONFIGURATION
 # ----------------------------------------------------------------------------
 image:
-  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/retail-store/checkout
+  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/gleamgoods/checkout
   pullPolicy: IfNotPresent
-  tag: sha-8dbabd5
+  tag: latest
 
 # ----------------------------------------------------------------------------
 # DATABASE CONFIGURATION
@@ -21,7 +21,7 @@ app:
   persistence:
     provider: redis
     redis:
-      endpoint: retail-dev-checkout-redis.ai01ey.0001.use1.cache.amazonaws.com:6379
+      endpoint: retail-gleamgoods-checkout-redis.liphah.0001.use1.cache.amazonaws.com:6379
 
   endpoints:
     orders: http://orders  # Orders service endpoint (ClusterIP service name)

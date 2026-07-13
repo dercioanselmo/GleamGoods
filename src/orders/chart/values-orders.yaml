@@ -7,9 +7,9 @@
 # IMAGE CONFIGURATION
 # ----------------------------------------------------------------------------
 image:
-  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/retail-store/orders
+  repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/gleamgoods/orders
   pullPolicy: IfNotPresent
-  tag: sha-d35da60
+  tag: latest
 
 # ----------------------------------------------------------------------------
 # DATABASE CONFIGURATION - AWS RDS PostgreSQL with Secrets Manager
@@ -20,7 +20,7 @@ postgresql:
 app:
   persistence:
     provider: postgres
-    endpoint: orders-postgres-db.cs1824wy44gd.us-east-1.rds.amazonaws.com:5432
+    endpoint: orders-postgres-db.cipcmuog8z8q.us-east-1.rds.amazonaws.com:5432
     database: ordersdb
 
     secret:
@@ -32,7 +32,7 @@ app:
       # Enable AWS Secrets Manager integration
       useSecretsManager: true  # Enable Secrets Manager
       secretsManager:
-        secretName: "retailstore-db-secret-1"  # AWS Secrets Manager secret name
+        secretName: "gleamgoods-db-secret"  # AWS Secrets Manager secret name
         region: "us-east-1"  # AWS region
 
   # ----------------------------------------------------------------------------
@@ -41,7 +41,7 @@ app:
   messaging:
     provider: sqs
     sqs:
-      queueName: retail-dev-orders-queue
+      queueName: retail-gleamgoods-orders-queue
 
     rabbitmq:
       addresses: []
