@@ -8,7 +8,7 @@
 image: 
   repository: 564956047797.dkr.ecr.us-east-1.amazonaws.com/gleamgoods/ui
   pullPolicy: IfNotPresent
-  tag: sha-66f23e0
+  tag: sha-51056cc
 
 # ----------------------------------------------------------------------------
 # APPLICATION CONFIGURATION
