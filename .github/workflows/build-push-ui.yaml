@@ -9,17 +9,108 @@ on:
 permissions:
   id-token: write
   contents: write
-  security-events: write
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
+  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
   ECR_REPOSITORY: gleamgoods/ui
 
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
+
     outputs:
       snyk_failed: ${{ steps.snyk.outcome == 'failure' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t ui-scan:latest src/ui
+
+      - name: Run Snyk Docker Scan
+        id: snyk
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          docker run --rm \
+            --entrypoint snyk \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}":/project \
+            -w /project \
+            -e SNYK_TOKEN \
+            snyk/snyk:docker \
+            test ui-scan:latest \
+            --severity-threshold=high \
+            --json-file-output=/project/snyk-report.json
+
+      - name: Verify Snyk report exists
+        if: always()
+        run: |
+          if [ -f snyk-report.json ]; then
+            echo "Snyk report generated successfully"
+            ls -lh snyk-report.json
+          else
+            echo "Snyk report was not generated"
+          fi
+
+      - name: Upload Snyk report to S3
+        if: always() && hashFiles('snyk-report.json') != ''
+        run: |
+          YEAR=$(date +%Y)
+          MONTH=$(date +%m)
+
+          aws s3 cp \
+            snyk-report.json \
+            s3://${REPORT_BUCKET}/ui/${YEAR}/${MONTH}/sha-${GITHUB_SHA::7}.json
+
+      - name: Upload Snyk report artifact
+        if: always() && hashFiles('snyk-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-json-report
+          path: snyk-report.json
+
+
+  approval:
+    needs: build-and-scan
+
+    if: needs.build-and-scan.outputs.snyk_failed == 'true'
+
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+
+    steps:
+      - name: Approval required
+        run: |
+          echo "High/Critical vulnerabilities detected."
+          echo "Review the Snyk report in S3 before approving deployment."
+
+
+  push-and-update:
+    needs:
+      - build-and-scan
+      - approval
+
+    if: |
+      always() &&
+      (
+        needs.build-and-scan.outputs.snyk_failed == 'false' ||
+        needs.approval.result == 'success'
+      )
+
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -36,91 +127,24 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Define image tags
-        id: vars
         run: |
           SHA_TAG=sha-${GITHUB_SHA::7}
           IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+
           echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
-          echo "SHA_TAG=$SHA_TAG" >> $GITHUB_ENV
+          echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
 
       - name: Build Docker image
         run: |
           docker build -t ui-scan:latest src/ui
 
-      - name: Run Snyk Docker Scan
-        id: snyk
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Push Docker images
         run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "${PWD}:/project" \
-            -e SNYK_TOKEN \
-            snyk/snyk:docker \
-            snyk test ui-scan:latest \
-              --severity-threshold=high \
-              --json-file-output=/project/snyk-report.json \
-              --sarif-file-output=/project/snyk-report.sarif
-
-      - name: Upload SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: snyk-report.sarif
-
-      - name: Verify Snyk report
-        if: always()
-        run: |
-          if [ -f snyk-report.sarif ]; then
-            echo "✅ Snyk SARIF report generated"
-            ls -lh snyk-report.sarif
-          else
-            echo "❌ Snyk report was not generated"
-          fi
-
-  approval:
-    needs: build-and-scan
-    if: needs.build-and-scan.outputs.snyk_failed == 'true'
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Approval required
-        run: |
-          echo "High/Critical vulnerabilities detected."
-          echo "Review the SARIF report in GitHub Security tab before approving."
-
-  push-and-update:
-    needs:
-      - build-and-scan
-      - approval
-    if: |
-      always() &&
-      (
-        needs.build-and-scan.outputs.snyk_failed == 'false' ||
-        needs.approval.result == 'success'
-      )
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push Docker images
-        run: |
-          IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
-          for tag in latest ${{ env.SHA_TAG }}; do
+          for tag in $TAGS; do
             IMAGE_URI="$IMAGE_BASE:$tag"
+
             echo "Tagging and pushing $IMAGE_URI"
+
             docker tag ui-scan:latest $IMAGE_URI
             docker push $IMAGE_URI
           done
@@ -129,20 +153,26 @@ jobs:
         run: |
           git config --global user.name "ci-bot"
           git config --global user.email "dercio.anselmo@gmail.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
-      - name: Update Helm values file
+          git remote set-url origin \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Update Helm values file with new image tag
         run: |
           cd src/ui
+
           git config user.name "ci-bot"
           git config user.email "dercio.anselmo@gmail.com"
-          sed -i "s|^ tag: .*| tag: ${{ env.SHA_TAG }}|" chart/values-ui.yaml
+
+          sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
+
           git diff --quiet || (
             git add chart/values-ui.yaml
-            git commit -m "Update UI image tag to ${{ env.SHA_TAG }}"
+            git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
             git push origin main
           )
 
       - name: CI Complete
         run: |
-          echo "✅ Image push and Helm update completed."
+          echo "Image push and Git update done"
+          echo "Tags used: $TAGS"
