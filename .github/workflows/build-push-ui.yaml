@@ -39,17 +39,27 @@ jobs:
       - name: Run Snyk Scan
         id: snyk
         continue-on-error: true
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ui-scan:latest
-          args: >
-            --severity-threshold=high
-            --json-file-output=snyk-report.json
+        run: |
+          docker run --rm \
+            -v "$(pwd)":/project \
+            -e SNYK_TOKEN=${{ secrets.SNYK_TOKEN }} \
+            snyk/snyk:docker \
+            test ui-scan:latest \
+            --severity-threshold=high \
+            --json-file-output=/project/snyk-report.json
+
+      - name: Verify Snyk report exists
+        if: always()
+        run: |
+          if [ -f snyk-report.json ]; then
+            echo "Snyk report generated successfully"
+            ls -lh snyk-report.json
+          else
+            echo "Snyk report was not generated"
+          fi
 
       - name: Upload Snyk report to S3
-        if: always()
+        if: always() && hashFiles('snyk-report.json') != ''
         run: |
           YEAR=$(date +%Y)
           MONTH=$(date +%m)
@@ -59,7 +69,7 @@ jobs:
             s3://${REPORT_BUCKET}/ui/${YEAR}/${MONTH}/sha-${GITHUB_SHA::7}.json
 
       - name: Upload Snyk report artifact
-        if: always()
+        if: always() && hashFiles('snyk-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: snyk-json-report
