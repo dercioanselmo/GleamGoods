@@ -12,9 +12,9 @@ permissions:
   security-events: write
 
 env:
-  #AWS_REGION: us-east-1
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
   ECR_REPOSITORY: gleamgoods/ui
-  #REPORT_BUCKET: cicd-security-scan-report-lzkhqm
 
 jobs:
 
