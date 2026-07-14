@@ -2,7 +2,7 @@ name: Build and Push UI Service to ECR
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
       - "src/ui/src/**"
 
@@ -13,11 +13,9 @@ permissions:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
-  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
   ECR_REPOSITORY: gleamgoods/ui
 
 jobs:
-
   build-and-scan:
     runs-on: ubuntu-latest
 
@@ -41,45 +39,33 @@ jobs:
       - name: Run Snyk Scan
         id: snyk
         continue-on-error: true
-        uses: snyk/actions/docker@master
+        uses: snyk/actions/docker@v4
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: ui-scan:latest
-          args: >
-            --severity-threshold=high
-            --json-file-output=snyk-report.json
-            --sarif-file-output=snyk-report.sarif
+          args: --severity-threshold=high
 
-      - name: Upload JSON artifact
+      - name: Generate Snyk SARIF report
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: snyk-json-report
-          path: snyk-report.json
+        run: |
+          snyk docker test ui-scan:latest \
+            --sarif-file-output=snyk-report.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Upload SARIF artifact
-        if: always()
+        if: always() && hashFiles('snyk-report.sarif') != ''
         uses: actions/upload-artifact@v4
         with:
           name: snyk-sarif-report
           path: snyk-report.sarif
 
       - name: Upload SARIF to GitHub Security
-        if: always()
+        if: always() && hashFiles('snyk-report.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-report.sarif
-
-      - name: Upload report to S3
-        if: always()
-        run: |
-          YEAR=$(date +%Y)
-          MONTH=$(date +%m)
-
-          aws s3 cp \
-            snyk-report.json \
-            s3://${REPORT_BUCKET}/ui/${YEAR}/${MONTH}/sha-${GITHUB_SHA::7}.json
 
   approval:
     needs: build-and-scan
@@ -137,11 +123,12 @@ jobs:
         run: |
           docker build -t ui-scan:latest src/ui
 
-      - name: Build and push Docker images
+      - name: Push Docker images
         run: |
           for tag in $TAGS; do
             IMAGE_URI="$IMAGE_BASE:$tag"
             echo "Tagging and pushing $IMAGE_URI"
+
             docker tag ui-scan:latest $IMAGE_URI
             docker push $IMAGE_URI
           done
@@ -150,7 +137,9 @@ jobs:
         run: |
           git config --global user.name "ci-bot"
           git config --global user.email "dercio.anselmo@gmail.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+          git remote set-url origin \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
       - name: Update Helm values file with new image tag
         run: |
