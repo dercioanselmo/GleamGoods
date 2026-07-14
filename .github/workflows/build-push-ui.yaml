@@ -9,10 +9,10 @@ on:
 permissions:
   id-token: write
   contents: write
-  security-events: write
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
+  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
   ECR_REPOSITORY: gleamgoods/ui
 
 jobs:
@@ -39,33 +39,32 @@ jobs:
       - name: Run Snyk Scan
         id: snyk
         continue-on-error: true
-        uses: snyk/actions/docker@v4
+        uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: ui-scan:latest
-          args: --severity-threshold=high
+          args: >
+            --severity-threshold=high
+            --json-file-output=snyk-report.json
 
-      - name: Generate Snyk SARIF report
+      - name: Upload Snyk report to S3
         if: always()
         run: |
-          snyk docker test ui-scan:latest \
-            --sarif-file-output=snyk-report.sarif
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          YEAR=$(date +%Y)
+          MONTH=$(date +%m)
 
-      - name: Upload SARIF artifact
-        if: always() && hashFiles('snyk-report.sarif') != ''
+          aws s3 cp \
+            snyk-report.json \
+            s3://${REPORT_BUCKET}/ui/${YEAR}/${MONTH}/sha-${GITHUB_SHA::7}.json
+
+      - name: Upload Snyk report artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: snyk-sarif-report
-          path: snyk-report.sarif
+          name: snyk-json-report
+          path: snyk-report.json
 
-      - name: Upload SARIF to GitHub Security
-        if: always() && hashFiles('snyk-report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: snyk-report.sarif
 
   approval:
     needs: build-and-scan
@@ -81,7 +80,8 @@ jobs:
       - name: Approval required
         run: |
           echo "High/Critical vulnerabilities detected."
-          echo "Review the Snyk report before approving deployment."
+          echo "Review the Snyk report in S3 before approving deployment."
+
 
   push-and-update:
     needs:
@@ -127,6 +127,7 @@ jobs:
         run: |
           for tag in $TAGS; do
             IMAGE_URI="$IMAGE_BASE:$tag"
+
             echo "Tagging and pushing $IMAGE_URI"
 
             docker tag ui-scan:latest $IMAGE_URI
