@@ -36,13 +36,17 @@ jobs:
         run: |
           docker build -t ui-scan:latest src/ui
 
-      - name: Run Snyk Scan
+      - name: Run Snyk Docker Scan
         id: snyk
         continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           docker run --rm \
-            -v "$(pwd)":/project \
-            -e SNYK_TOKEN=${{ secrets.SNYK_TOKEN }} \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}":/project \
+            -w /project \
+            -e SNYK_TOKEN \
             snyk/snyk:docker \
             test ui-scan:latest \
             --severity-threshold=high \
