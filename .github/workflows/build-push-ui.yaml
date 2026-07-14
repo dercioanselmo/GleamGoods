@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - "src/ui/src/**"
-      #- ".github/workflows/build-push-ui.yaml" # During testing phases only for prod comment this line
+      #- ".github/workflows/build-push-ui.yaml"
 
 permissions:
   id-token: write # Needed for OIDC
@@ -44,16 +44,27 @@ jobs:
           echo "latest = convenience tag for testing"
           echo "$SHA_TAG = immutable tag used in Helm values"
 
+      - name: Build Docker image for scanning
+        run: |
+          docker build -t ui-scan:latest src/ui
+
+      - name: Run Snyk to check Docker image for vulnerabilities
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ui-scan:latest
+          args: --severity-threshold=high
+
       - name: Build and push Docker images
         run: |
           for tag in $TAGS; do
             IMAGE_URI="$IMAGE_BASE:$tag"
-            echo "Building and pushing $IMAGE_URI"
-            docker build -t $IMAGE_URI src/ui
+            echo "Tagging and pushing $IMAGE_URI"
+            docker tag ui-scan:latest $IMAGE_URI
             docker push $IMAGE_URI
           done
 
-          
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
           git config --global user.name "ci-bot"
@@ -71,7 +82,6 @@ jobs:
             git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
             git push origin main
           )
-
 
       - name: CI Complete
         run: |
