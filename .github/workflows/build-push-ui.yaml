@@ -5,18 +5,110 @@ on:
     branches: [ "main" ]
     paths:
       - "src/ui/src/**"
-      #- ".github/workflows/build-push-ui.yaml"
 
 permissions:
-  id-token: write # Needed for OIDC
-  contents: write # Needed to push commits
+  id-token: write
+  contents: write
+  security-events: write
 
 env:
-  AWS_REGION: us-east-1
+  #AWS_REGION: us-east-1
   ECR_REPOSITORY: gleamgoods/ui
+  #REPORT_BUCKET: cicd-security-scan-report-lzkhqm
 
 jobs:
-  build-and-push-ui:
+
+  build-and-scan:
+    runs-on: ubuntu-latest
+
+    outputs:
+      snyk_failed: ${{ steps.snyk.outcome == 'failure' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t ui-scan:latest src/ui
+
+      - name: Run Snyk Scan
+        id: snyk
+        continue-on-error: true
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ui-scan:latest
+          args: >
+            --severity-threshold=high
+            --json-file-output=snyk-report.json
+            --sarif-file-output=snyk-report.sarif
+
+      - name: Upload JSON artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-json-report
+          path: snyk-report.json
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-sarif-report
+          path: snyk-report.sarif
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-report.sarif
+
+      - name: Upload report to S3
+        if: always()
+        run: |
+          YEAR=$(date +%Y)
+          MONTH=$(date +%m)
+
+          aws s3 cp \
+            snyk-report.json \
+            s3://${REPORT_BUCKET}/ui/${YEAR}/${MONTH}/sha-${GITHUB_SHA::7}.json
+
+  approval:
+    needs: build-and-scan
+
+    if: needs.build-and-scan.outputs.snyk_failed == 'true'
+
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+
+    steps:
+      - name: Approval required
+        run: |
+          echo "High/Critical vulnerabilities detected."
+          echo "Review the Snyk report before approving deployment."
+
+  push-and-update:
+    needs:
+      - build-and-scan
+      - approval
+
+    if: |
+      always() &&
+      (
+        needs.build-and-scan.outputs.snyk_failed == 'false' ||
+        needs.approval.result == 'success'
+      )
+
     runs-on: ubuntu-latest
 
     steps:
@@ -34,27 +126,16 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Define image tags
-        id: vars
         run: |
           SHA_TAG=sha-${GITHUB_SHA::7}
           IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+
           echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
           echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
-          echo "Using tags: latest and $SHA_TAG"
-          echo "latest = convenience tag for testing"
-          echo "$SHA_TAG = immutable tag used in Helm values"
 
-      - name: Build Docker image for scanning
+      - name: Build Docker image
         run: |
           docker build -t ui-scan:latest src/ui
-
-      - name: Run Snyk to check Docker image for vulnerabilities
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ui-scan:latest
-          args: --severity-threshold=high
 
       - name: Build and push Docker images
         run: |
@@ -74,9 +155,12 @@ jobs:
       - name: Update Helm values file with new image tag
         run: |
           cd src/ui
+
           git config user.name "ci-bot"
           git config user.email "dercio.anselmo@gmail.com"
+
           sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
+
           git diff --quiet || (
             git add chart/values-ui.yaml
             git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
