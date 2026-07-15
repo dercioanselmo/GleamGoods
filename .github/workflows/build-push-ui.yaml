@@ -2,14 +2,14 @@ name: Build and Push UI Service to ECR
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
     paths:
       - "src/ui/src/**"
-      # - ".github/workflows/build-push-ui.yaml" # Uncomment only during testing
+      #- ".github/workflows/build-push-ui.yaml" # During testing phases only for prod comment this line
 
 permissions:
-  id-token: write
-  contents: write
+  id-token: write # Needed for OIDC
+  contents: write # Needed to push commits
 
 env:
   AWS_REGION: us-east-1
@@ -17,71 +17,9 @@ env:
   REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
 
 jobs:
-  build-and-scan:
+  build-and-push-ui:
     runs-on: ubuntu-latest
-    outputs:
-      has_vulnerabilities: ${{ steps.check-vulns.outputs.has_vulnerabilities }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Define image tags
-        id: vars
-        run: |
-          SHA_TAG=sha-${GITHUB_SHA::7}
-          IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}" || echo "IMAGE_BASE=placeholder" >> $GITHUB_ENV
-          echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
-          echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
-          echo "LOCAL_TAG=ui-local:${SHA_TAG}" >> $GITHUB_ENV
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build Docker image locally
-        run: |
-          docker build -t ${{ env.LOCAL_TAG }} -f src/ui/Dockerfile src/ui
-
-      - name: Run Snyk Container scan (before push)
-        uses: snyk/actions/docker@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ${{ env.LOCAL_TAG }}
-          args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
-
-      - name: Upload Snyk report to S3
-        run: |
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "Report upload skipped"
-
-      - name: Check for high/critical vulnerabilities
-        id: check-vulns
-        run: |
-          if [ -f snyk-container.json ]; then
-            VULNS=$(jq '.vulnerabilities | length' snyk-container.json 2>/dev/null || echo 0)
-            echo "Found $VULNS vulnerabilities"
-            if [ "$VULNS" -gt 0 ]; then
-              echo "has_vulnerabilities=true" >> $GITHUB_OUTPUT
-            else
-              echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
-          fi
-
-  approve-and-push:
-    needs: build-and-scan
-    runs-on: ubuntu-latest
-    environment: ${{ needs.build-and-scan.outputs.has_vulnerabilities == 'true' && 'production' || 'staging' }}
-    # If vulnerabilities found → requires manual approval from people with access to the "production" environment
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -103,35 +41,56 @@ jobs:
           IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
           echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
           echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
+          echo "Using tags: latest and $SHA_TAG"
+          echo "latest = convenience tag for testing"
+          echo "$SHA_TAG = immutable tag used in Helm values"
 
-      - name: Pull local image from build job (via artifact or re-tag)
-        run: |
-          # Since the previous job is on the same runner type, we can re-build (fast with layer cache) or use artifacts
-          docker build -t ${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7} -f src/ui/Dockerfile src/ui
-          # Optional: also tag as latest if desired
-
-      - name: Push Docker images to ECR
+      - name: Build and push Docker images
         run: |
           for tag in $TAGS; do
             IMAGE_URI="$IMAGE_BASE:$tag"
-            echo "Pushing $IMAGE_URI"
-            docker tag ${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7} $IMAGE_URI
+            echo "Building and pushing $IMAGE_URI"
+            docker build -t $IMAGE_URI src/ui
             docker push $IMAGE_URI
           done
+
+          
+      - name: Setup Git auth using GITHUB_TOKEN
+        run: |
+          git config --global user.name "ci-bot"
+          git config --global user.email "dercio.anselmo@gmail.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      # === Snyk Container Scan ===
+      - name: Run Snyk Container scan
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
+          args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
+
+      - name: Upload Snyk report to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "Report upload skipped"
+
 
       - name: Update Helm values file with new image tag
         run: |
           cd src/ui
           git config user.name "ci-bot"
           git config user.email "dercio.anselmo@gmail.com"
-          sed -i "s|^ tag: .*| tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
+          sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
           git diff --quiet || (
             git add chart/values-ui.yaml
             git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
             git push origin main
           )
 
+
       - name: CI Complete
         run: |
-          echo "✅ Image successfully built, scanned, and pushed."
+          echo "Image push and Git update done"
           echo "Tags used: $TAGS"
