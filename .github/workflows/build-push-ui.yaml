@@ -23,18 +23,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Snyk Open Source Scan - Run from correct directory
+      # Snyk Open Source Scan (Reliable method)
       - name: Run Snyk Open Source Scan
-        uses: snyk/actions/node@master
-        continue-on-error: true
+        run: |
+          cd src/ui
+          npm ci --silent || true
+          npx snyk test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --json-file-output=snyk-os.json
-          working-directory: ./src/ui   # ← This is the key fix
 
       # Upload OS report to S3
-      - name: Configure AWS credentials for reports
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
@@ -43,7 +42,15 @@ jobs:
       - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp src/ui/snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json || echo "⚠️ No OS report generated"
+          if [ -f snyk-os.json ] && [ -s snyk-os.json ]; then
+            aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
+            echo "✅ OS report uploaded"
+          else
+            echo "⚠️ No OS report generated (file missing or empty)"
+            # Create a minimal report so something is uploaded
+            echo '{"error": "No Snyk report generated - check if package.json exists in src/ui"}' > snyk-os.json
+            aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
+          fi
 
   build-and-push:
     needs: security-scan
