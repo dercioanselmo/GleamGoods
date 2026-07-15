@@ -24,6 +24,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ==========================================================
+      # Trivy Repository Scan (Secrets + Misconfigurations + Vulnerabilities)
+      # ==========================================================
+      - name: Run Trivy Repository Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy-fs.json
+          exit-code: '1'
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -54,14 +69,15 @@ jobs:
             docker push $IMAGE_URI
           done
 
-          
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
           git config --global user.name "ci-bot"
           git config --global user.email "dercio.anselmo@gmail.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
-      # === Snyk Container Scan ===
+      # ==========================================================
+      # Snyk Container Scan
+      # ==========================================================
       - name: Run Snyk Container scan
         uses: snyk/actions/docker@master
         continue-on-error: true
@@ -71,11 +87,24 @@ jobs:
           image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
           args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
 
-      - name: Upload Snyk report to S3
+      # ==========================================================
+      # Upload Security Reports
+      # ==========================================================
+      - name: Upload Trivy report to S3
+        if: always()
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "Report upload skipped"
+          aws s3 cp trivy-fs.json \
+            s3://${{ env.REPORT_BUCKET }}/trivy-reports/${GITHUB_SHA::7}/trivy-fs-${TIMESTAMP}.json \
+            || echo "Trivy report upload skipped"
 
+      - name: Upload Snyk report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp snyk-container.json \
+            s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json \
+            || echo "Snyk report upload skipped"
 
       - name: Update Helm values file with new image tag
         run: |
@@ -88,7 +117,6 @@ jobs:
             git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
             git push origin main
           )
-
 
       - name: CI Complete
         run: |
