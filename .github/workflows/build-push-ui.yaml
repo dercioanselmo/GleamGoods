@@ -23,32 +23,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Snyk Open Source Scan (Reliable method)
       - name: Run Snyk Open Source Scan
         run: |
+          echo "→ Current directory: $(pwd)"
+          echo "→ Files in src/ui:"
+          ls -la src/ui
+          
           cd src/ui
-          npm ci --silent || true
-          npx snyk test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
+          echo "→ Running in: $(pwd)"
+          
+          if [ -f package.json ]; then
+            echo "✅ package.json found"
+            npm ci --silent --ignore-scripts || echo "npm ci failed, trying without ci..."
+            npx snyk test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
+            echo "→ Snyk scan completed (exit code $?)"
+          else
+            echo "❌ No package.json found in src/ui"
+            echo '{"error": "No package.json found in src/ui directory"}' > ../snyk-os.json
+          fi
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      # Upload OS report to S3
-      - name: Configure AWS credentials
+      - name: Upload Snyk OS report to S3
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           if [ -f snyk-os.json ] && [ -s snyk-os.json ]; then
             aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
             echo "✅ OS report uploaded"
           else
-            echo "⚠️ No OS report generated (file missing or empty)"
-            # Create a minimal report so something is uploaded
-            echo '{"error": "No Snyk report generated - check if package.json exists in src/ui"}' > snyk-os.json
+            echo "⚠️ No valid OS report - creating placeholder"
+            echo '{"error": "Snyk scan did not produce output"}' > snyk-os.json
             aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
           fi
 
@@ -87,7 +95,6 @@ jobs:
             docker push $IMAGE_URI
           done
 
-      # Snyk Container Scan
       - name: Run Snyk Container scan
         uses: snyk/actions/docker@master
         continue-on-error: true
@@ -100,7 +107,7 @@ jobs:
       - name: Upload Container scan report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "⚠️ No container report generated"
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "⚠️ Container report upload failed"
 
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
