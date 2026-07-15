@@ -27,8 +27,9 @@ jobs:
           cd src/ui
           if [ -f pom.xml ]; then
             echo "✅ pom.xml found"
-            npx snyk maven test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
+            npx snyk maven test --severity-threshold=high --json-file-output=../snyk-os.json || true
             echo "Snyk scan finished (exit code $?)"
+            ls -la ../snyk-os.json || echo "File not created"
           else
             echo "❌ pom.xml not found"
             echo '{"error": "No pom.xml found"}' > ../snyk-os.json
@@ -45,12 +46,12 @@ jobs:
       - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          if [ -f snyk-os.json ]; then
+          if [ -f snyk-os.json ] && [ -s snyk-os.json ]; then
             aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
             echo "✅ OS report uploaded"
           else
-            echo "⚠️ snyk-os.json not found - creating placeholder"
-            echo '{"error": "Snyk scan did not create report"}' > snyk-os.json
+            echo "⚠️ No valid report, creating placeholder"
+            echo '{"error": "Snyk scan did not produce valid output"}' > snyk-os.json
             aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
           fi
 
