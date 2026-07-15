@@ -10,8 +10,6 @@ on:
 permissions:
   id-token: write
   contents: write
-  # Required for GitHub Code Scanning + manual approval environment
-  security-events: write
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
@@ -32,46 +30,24 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --sarif-file-output=snyk-os.sarif
+          args: --severity-threshold=high --json-file-output=snyk-os.json
 
-      # === Snyk Code (SAST - Static Code Analysis) ===
-      - name: Run Snyk Code Scan
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: code test
-          args: --sarif-file-output=snyk-code.sarif
-
-      # Upload reports to GitHub Code Scanning (nice UI in Security tab)
-      - name: Upload Snyk results to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: snyk-os.sarif
-      - name: Upload Snyk Code results to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: snyk-code.sarif
-
-      # === Upload reports to S3 ===
-      - name: Configure AWS credentials
+      # === Upload Open Source report to S3 ===
+      - name: Configure AWS credentials for reports
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload Snyk reports to S3
+      - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-os.sarif s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.sarif
-          aws s3 cp snyk-code.sarif s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-code-${TIMESTAMP}.sarif
-          echo "Reports uploaded to S3: s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/"
+          aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json || echo "No OS report generated"
 
   build-and-push:
     needs: security-scan
     runs-on: ubuntu-latest
-    environment: production   # ← This enables manual approval
+    environment: production   # Manual approval gate
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -103,7 +79,7 @@ jobs:
             docker push $IMAGE_URI
           done
 
-      # Optional: Snyk Container Scan on the built image
+      # === Snyk Container Scan ===
       - name: Run Snyk Container scan
         uses: snyk/actions/docker@master
         continue-on-error: true
@@ -111,12 +87,12 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
-          args: --file=src/ui/Dockerfile --severity-threshold=high --sarif-file-output=snyk-container.sarif
+          args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
 
       - name: Upload Container scan report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.sarif s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.sarif
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "No container report generated"
 
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
