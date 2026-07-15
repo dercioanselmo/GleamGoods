@@ -23,7 +23,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # === Snyk Open Source (Dependencies) ===
+      # Snyk Open Source Scan - Run from correct directory
       - name: Run Snyk Open Source Scan
         uses: snyk/actions/node@master
         continue-on-error: true
@@ -31,8 +31,9 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high --json-file-output=snyk-os.json
+        working-directory: ./src/ui   # ← This is the key fix
 
-      # === Upload Open Source report to S3 ===
+      # Upload OS report to S3
       - name: Configure AWS credentials for reports
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -42,17 +43,12 @@ jobs:
       - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json || echo "⚠️ No OS report to upload (or permission issue)"
-
-      - name: Upload Container scan report to S3
-        run: |
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "⚠️ No container report to upload (or permission issue)"
+          aws s3 cp src/ui/snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json || echo "⚠️ No OS report generated"
 
   build-and-push:
     needs: security-scan
     runs-on: ubuntu-latest
-    environment: production   # Manual approval gate
+    environment: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -84,7 +80,7 @@ jobs:
             docker push $IMAGE_URI
           done
 
-      # === Snyk Container Scan ===
+      # Snyk Container Scan
       - name: Run Snyk Container scan
         uses: snyk/actions/docker@master
         continue-on-error: true
@@ -97,7 +93,7 @@ jobs:
       - name: Upload Container scan report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "No container report generated"
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "⚠️ No container report generated"
 
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
@@ -119,4 +115,4 @@ jobs:
 
       - name: CI Complete
         run: |
-          echo "✅ Image push and Git update completed"
+          echo "✅ Build, push, and Helm update completed successfully"
