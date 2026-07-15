@@ -14,6 +14,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: gleamgoods/ui
+  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
 
 jobs:
   build-and-push-ui:
@@ -59,6 +60,22 @@ jobs:
           git config --global user.name "ci-bot"
           git config --global user.email "dercio.anselmo@gmail.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      # === Snyk Container Scan ===
+      - name: Run Snyk Container scan
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
+          args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
+
+      - name: Upload Snyk report to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "Report upload skipped"
+
 
       - name: Update Helm values file with new image tag
         run: |
