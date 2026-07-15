@@ -31,7 +31,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high --json-file-output=snyk-os.json
-        working-directory: ./src/ui   # ← This is the key fix
+          working-directory: ./src/ui   # ← This is the key fix
 
       # Upload OS report to S3
       - name: Configure AWS credentials for reports
