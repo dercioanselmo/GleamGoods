@@ -34,9 +34,9 @@ jobs:
           
           if [ -f package.json ]; then
             echo "✅ package.json found"
-            npm ci --silent --ignore-scripts || echo "npm ci failed, trying without ci..."
+            npm ci --silent --ignore-scripts || echo "npm ci failed"
             npx snyk test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
-            echo "→ Snyk scan completed (exit code $?)"
+            echo "→ Snyk scan completed"
           else
             echo "❌ No package.json found in src/ui"
             echo '{"error": "No package.json found in src/ui directory"}' > ../snyk-os.json
@@ -44,11 +44,13 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Upload Snyk OS report to S3
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           if [ -f snyk-os.json ] && [ -s snyk-os.json ]; then
