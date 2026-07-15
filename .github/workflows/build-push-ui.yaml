@@ -61,20 +61,20 @@ jobs:
             docker push $IMAGE_URI
           done
 
-      # # === Snyk Container Scan ===
-      # - name: Run Snyk Container scan
-      #   uses: snyk/actions/docker@master
-      #   continue-on-error: true
-      #   env:
-      #     SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      #   with:
-      #     image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
-      #     args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
+      # === Snyk Container Scan ===
+      - name: Run Snyk Container scan
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
+          args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
 
-      # - name: Upload Snyk report to S3
-      #   run: |
-      #     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-      #     aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "Report upload skipped"
+      - name: Upload Snyk report to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "Report upload skipped"
 
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
