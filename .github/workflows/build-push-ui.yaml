@@ -5,7 +5,6 @@ on:
     branches: [ "main" ]
     paths:
       - "src/ui/src/**"
-      #- ".github/workflows/build-push-ui.yaml"
 
 permissions:
   id-token: write
@@ -23,23 +22,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Snyk Open Source Scan
+      - name: Run Snyk Open Source Scan (Java/Maven)
         run: |
-          echo "→ Current directory: $(pwd)"
-          echo "→ Files in src/ui:"
-          ls -la src/ui
-          
           cd src/ui
-          echo "→ Running in: $(pwd)"
-          
-          if [ -f package.json ]; then
-            echo "✅ package.json found"
-            npm ci --silent --ignore-scripts || echo "npm ci failed"
-            npx snyk test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
-            echo "→ Snyk scan completed"
+          if [ -f pom.xml ]; then
+            echo "✅ pom.xml found"
+            npx snyk maven test --severity-threshold=high --json > ../snyk-os.json 2>&1 || true
           else
-            echo "❌ No package.json found in src/ui"
-            echo '{"error": "No package.json found in src/ui directory"}' > ../snyk-os.json
+            echo "❌ pom.xml not found in src/ui"
+            echo '{"error": "No pom.xml found in src/ui directory"}' > ../snyk-os.json
           fi
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -53,14 +44,7 @@ jobs:
       - name: Upload Snyk OS report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          if [ -f snyk-os.json ] && [ -s snyk-os.json ]; then
-            aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
-            echo "✅ OS report uploaded"
-          else
-            echo "⚠️ No valid OS report - creating placeholder"
-            echo '{"error": "Snyk scan did not produce output"}' > snyk-os.json
-            aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
-          fi
+          aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json || true
 
   build-and-push:
     needs: security-scan
@@ -106,10 +90,10 @@ jobs:
           image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
           args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
 
-      - name: Upload Container scan report to S3
+      - name: Upload Container report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || echo "⚠️ Container report upload failed"
+          aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || true
 
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
