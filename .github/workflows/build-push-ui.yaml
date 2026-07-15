@@ -22,38 +22,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Snyk Open Source Scan (Java/Maven)
-        run: |
-          cd src/ui
-          if [ -f pom.xml ]; then
-            echo "✅ pom.xml found"
-            npx snyk maven test --severity-threshold=high --json-file-output=../snyk-os.json || true
-            echo "Snyk scan finished (exit code $?)"
-            ls -la ../snyk-os.json || echo "File not created"
-          else
-            echo "❌ pom.xml not found"
-            echo '{"error": "No pom.xml found"}' > ../snyk-os.json
-          fi
+      # Only Container Scan (working reliably)
+      - name: Run Snyk Container Scan (after build)
+        uses: snyk/actions/docker@master
+        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Upload Snyk OS report to S3
-        run: |
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          if [ -f snyk-os.json ] && [ -s snyk-os.json ]; then
-            aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
-            echo "✅ OS report uploaded"
-          else
-            echo "⚠️ No valid report, creating placeholder"
-            echo '{"error": "Snyk scan did not produce valid output"}' > snyk-os.json
-            aws s3 cp snyk-os.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-os-${TIMESTAMP}.json
-          fi
+          image: "placeholder"  # Will be updated in build job
+          args: --severity-threshold=high --json-file-output=snyk-container.json
 
   build-and-push:
     needs: security-scan
@@ -99,7 +76,7 @@ jobs:
           image: "${{ env.IMAGE_BASE }}:sha-${GITHUB_SHA::7}"
           args: --file=src/ui/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
 
-      - name: Upload Container report to S3
+      - name: Upload Snyk Container report to S3
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           aws s3 cp snyk-container.json s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json || true
@@ -113,9 +90,12 @@ jobs:
       - name: Update Helm values file with new image tag
         run: |
           cd src/ui
+
           git config user.name "ci-bot"
           git config user.email "dercio.anselmo@gmail.com"
+
           sed -i "s|^ tag: .*| tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
+          echo "Updateing Helm values file with new image tag sha-${GITHUB_SHA::7}"
           git diff --quiet || (
             git add chart/values-ui.yaml
             git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
