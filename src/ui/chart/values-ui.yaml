@@ -68,9 +68,9 @@ autoscaling:
 # ----------------------------------------------------------------------------
 # KARPENTER NODE SELECTION
 # ----------------------------------------------------------------------------
-# Schedule pods on Karpenter On-Demand nodes for stability
+# Schedule pods on Karpenter On-Demand or Sport nodes for stability
 nodeSelector:
-  karpenter.sh/capacity-type: spot
+  karpenter.sh/capacity-type: On-Demand
 
 # ----------------------------------------------------------------------------
 # TOPOLOGY SPREAD CONSTRAINTS
