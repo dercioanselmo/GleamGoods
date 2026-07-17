@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "ui.fullname" . }}
   labels:
@@ -15,6 +15,20 @@ spec:
   selector:
     matchLabels:
       {{- include "ui.selectorLabels" . | nindent 6 }}
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - pause: {}
+#        - setWeight: 40
+#        - pause: {duration: 10s}
+#        - setWeight: 60
+#        - pause: {duration: 10s}
+#        - setWeight: 80
+#        - pause: {duration: 10s}
+#        - setWeight: 100
+#      maxSurge: 1
+#      maxUnavailable: 0
   template:
     metadata:
       {{- if or .Values.podAnnotations .Values.metrics.enabled }}
