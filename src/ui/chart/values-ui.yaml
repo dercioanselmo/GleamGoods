@@ -32,10 +32,10 @@ ingress:
   enabled: true
   className: alb
   annotations:
+    alb.ingress.kubernetes.io/group.name: gleamgoods-ui
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/liveness
-
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564956047797:certificate/e27fa43e-60e8-4b71-ae4e-95e7e7cd3b46
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443},{"HTTP": 80}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'

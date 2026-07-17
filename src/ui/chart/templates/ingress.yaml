@@ -1,112 +1,35 @@
-{{- if and .Values.ingress.enabled .Values.ingresses }}
-  {{- fail "Cannot set both ingress.enabled and ingresses" }}
-{{- end }}
-{{- if .Values.ingress.enabled -}}
-{{- $fullName := include "ui.fullname" . -}}
-{{- $svcPort := .Values.service.port -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $fullName }}
+  name: ui
+  namespace: default
   labels:
-    {{- include "ui.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+    app.kubernetes.io/component: service
+    app.kubernetes.io/instance: ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: ui
+    app.kubernetes.io/owner: glramgoods
+    helm.sh/chart: ui-1.3.0
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    alb.ingress.kubernetes.io/group.name: gleamgoods-ui
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564956047797:certificate/e27fa43e-60e8-4b71-ae4e-95e7e7cd3b46
+    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/liveness
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443},{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/target-type: ip
+    argocd.argoproj.io/tracking-id: ui:networking.k8s.io/Ingress:default/ui
+    external-dns.alpha.kubernetes.io/hostname: gleamgoods.dercioanselmo.com
 spec:
-  {{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className }}
-  {{- end }}
-  {{- if .Values.ingress.tls }}
-  tls:
-    {{- range .Values.ingress.tls }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
-  {{- end }}
+  ingressClassName: alb
   rules:
-    {{- if .Values.ingress.hosts }}
-    {{- range .Values.ingress.hosts }}
-    - host: {{ . | quote }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  number: {{ $svcPort }}
-    {{- end }}
-    {{- else }}
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  number: {{ $svcPort }}
-    {{- end }}
-{{- end }}
-{{- if .Values.ingresses }}
-{{- $fullName := include "ui.fullname" . -}}
-{{- $svcPort := .Values.service.port -}}
-{{- range .Values.ingresses }}
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: {{ $fullName }}-{{ .name }}
-  labels:
-    {{- include "ui.labels" $ | nindent 4 }}
-  {{- with .annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-spec:
-  {{- if .className }}
-  ingressClassName: {{ .className }}
-  {{- end }}
-  {{- if .tls }}
-  tls:
-    {{- range .tls }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
-  {{- end }}
-  rules:
-    {{- if .hosts }}
-    {{- range .hosts }}
-    - host: {{ . | quote }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  number: {{ $svcPort }}
-    {{- end }}
-    {{- else }}
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  number: {{ $svcPort }}
-    {{- end }}
-{{- end }}
-{{- end }}
+  - host: gleamgoods.dercioanselmo.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: ui
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
