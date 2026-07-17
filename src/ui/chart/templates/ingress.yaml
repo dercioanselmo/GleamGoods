@@ -11,13 +11,14 @@ metadata:
     app.kubernetes.io/owner: glramgoods
     helm.sh/chart: ui-1.3.0
   annotations:
+    alb.ingress.kubernetes.io/load-balancer-name: gleamgoods-ui
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564956047797:certificate/e27fa43e-60e8-4b71-ae4e-95e7e7cd3b46
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/liveness
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443},{"HTTP": 80}]'
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/target-type: ip
-    argocd.argoproj.io/tracking-id: ui:networking.k8s.io/Ingress:gleamgoods/ui
+    argocd.argoproj.io/tracking-id: ui:networking.k8s.io/Ingress:default/ui
     external-dns.alpha.kubernetes.io/hostname: gleamgoods.dercioanselmo.com
 spec:
   ingressClassName: alb
