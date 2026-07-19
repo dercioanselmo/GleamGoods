@@ -19,7 +19,7 @@ spec:
     canary:
       steps:
         - setWeight: 50
-        - pause: {}
+        - pause: { duration: 60s }
 #        - setWeight: 40
 #        - pause: {duration: 10s}
 #        - setWeight: 60
@@ -31,11 +31,14 @@ spec:
 #      maxUnavailable: 0
   template:
     metadata:
-      {{- if or .Values.podAnnotations .Values.metrics.enabled }}
+      {{- if or .Values.podAnnotations .Values.metrics.enabled (and (eq .Values.app.persistence.provider "postgres") .Values.app.persistence.secret.useSecretsManager) }}
       annotations:
         {{- include "orders.podAnnotations" . | nindent 8 }}
         {{- if and .Values.opentelemetry.enabled .Values.opentelemetry.instrumentation }}
         instrumentation.opentelemetry.io/inject-sdk: {{ .Values.opentelemetry.instrumentation }}
+        {{- end }}
+        {{- if and (eq .Values.app.persistence.provider "postgres") .Values.app.persistence.secret.useSecretsManager }}
+        reloader.stakater.com/auto: "true"
         {{- end }}
       {{- end }}
       labels:

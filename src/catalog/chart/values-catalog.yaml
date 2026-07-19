@@ -29,8 +29,8 @@ app:
       
       useSecretsManager: true  # Enable Secrets Manager
       secretsManager:
-        secretName: "gleamgoods-db-secret"
-        region: "us-east-1"      
+        secretName: "gleamgoods-catalog-db-secret"
+        region: "us-east-1"
 
 # ----------------------------------------------------------------------------
 # RESOURCE MANAGEMENT

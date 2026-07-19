@@ -32,7 +32,7 @@ app:
       # Enable AWS Secrets Manager integration
       useSecretsManager: true  # Enable Secrets Manager
       secretsManager:
-        secretName: "gleamgoods-db-secret"  # AWS Secrets Manager secret name
+        secretName: "gleamgoods-orders-db-secret"  # AWS Secrets Manager secret name
         region: "us-east-1"  # AWS region
 
   # ----------------------------------------------------------------------------
