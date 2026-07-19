@@ -1,0 +1,31 @@
+# GleamGoods DAST rule overrides (OWASP ZAP baseline scan).
+# Format: <rule id><TAB><action: FAIL|IGNORE|WARN|INFO>
+#
+# Anything not listed here keeps ZAP's default WARN action. Combined with
+# the `-I` flag in the dast-zap.yaml workflow, unlisted WARNs are still
+# captured in the report but never fail the job - only the rules
+# explicitly marked FAIL below do.
+
+# Cookie No HttpOnly Flag - session cookie stealable via XSS
+10010	FAIL
+
+# Cookie Without Secure Flag - session cookie exposed over plain HTTP
+10011	FAIL
+
+# Information Disclosure - Debug Error Messages
+10023	FAIL
+
+# Information Disclosure - Sensitive Information in URL
+10024	FAIL
+
+# Strict-Transport-Security Header Not Set
+10035	FAIL
+
+# Cross-Domain Misconfiguration (permissive CORS)
+10098	FAIL
+
+# Absence of Anti-CSRF Tokens
+10202	FAIL
+
+# Application Error Disclosure
+90022	FAIL
