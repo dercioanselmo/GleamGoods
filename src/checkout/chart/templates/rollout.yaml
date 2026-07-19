@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "checkout.fullname" . }}
   labels:
@@ -9,9 +9,10 @@ spec:
   replicas: {{ .Values.replicaCount }}
 {{- end }}
   strategy:
-    rollingUpdate:
-      maxUnavailable: 1
-    type: RollingUpdate
+    canary:
+      steps:
+        - setWeight: 50
+        - pause: { duration: 60s }
   selector:
     matchLabels:
       {{- include "checkout.selectorLabels" . | nindent 6 }}
