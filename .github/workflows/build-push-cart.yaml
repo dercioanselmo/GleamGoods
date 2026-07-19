@@ -14,20 +14,73 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: gleamgoods/cart
+  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
 
 jobs:
-  build-and-push-cart:
+  # ==============================================================
+  # Scan, build and push the image to ECR. Scans never fail this
+  # job (continue-on-error) - findings are recorded and surfaced
+  # to the deploy-approval gate below instead of hard-failing CI.
+  # ==============================================================
+  scan-build-push:
     runs-on: ubuntu-latest
+    outputs:
+      findings: ${{ steps.evaluate.outputs.findings }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # ==========================================================
+      # Trivy Repository Scan (Secrets + Misconfigurations + Vulnerabilities/SCA)
+      # ==========================================================
+      - name: Run Trivy Repository Scan
+        id: trivy-fs
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: json
+          output: trivy-fs.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # ==========================================================
+      # Snyk Open Source SCA Scan (Maven dependency tree)
+      # ==========================================================
+      - name: Run Snyk SCA scan
+        id: snyk-sca
+        continue-on-error: true
+        uses: snyk/actions/maven@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --file=src/cart/pom.xml --severity-threshold=high --json-file-output=snyk-sca.json
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload Trivy repo report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp trivy-fs.json \
+            s3://${{ env.REPORT_BUCKET }}/trivy-reports/${GITHUB_SHA::7}/trivy-fs-${TIMESTAMP}.json \
+            || echo "Trivy report upload skipped"
+
+      - name: Upload Snyk SCA report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp snyk-sca.json \
+            s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-sca-${TIMESTAMP}.json \
+            || echo "Snyk SCA report upload skipped"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -38,21 +91,115 @@ jobs:
         run: |
           SHA_TAG=sha-${GITHUB_SHA::7}
           IMAGE_BASE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+          echo "SHA_TAG=$SHA_TAG" >> $GITHUB_ENV
           echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_ENV
           echo "TAGS=latest $SHA_TAG" >> $GITHUB_ENV
           echo "Using tags: latest and $SHA_TAG"
           echo "latest = convenience tag for testing"
           echo "$SHA_TAG = immutable tag used in Helm values"
 
-      - name: Build and push Docker images
+      - name: Build Docker image
         run: |
+          docker build -t $IMAGE_BASE:$SHA_TAG src/cart
+
+      # ==========================================================
+      # Trivy Image Scan (OS + app-layer vulnerabilities in the built image)
+      # ==========================================================
+      - name: Run Trivy Image Scan
+        id: trivy-image
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_BASE }}:${{ env.SHA_TAG }}
+          scanners: vuln
+          format: json
+          output: trivy-image.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Upload Trivy image report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp trivy-image.json \
+            s3://${{ env.REPORT_BUCKET }}/trivy-reports/${GITHUB_SHA::7}/trivy-image-${TIMESTAMP}.json \
+            || echo "Trivy image report upload skipped"
+
+      # ==========================================================
+      # Snyk Container Scan
+      # ==========================================================
+      - name: Run Snyk Container scan
+        id: snyk-container
+        continue-on-error: true
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: "${{ env.IMAGE_BASE }}:${{ env.SHA_TAG }}"
+          args: --file=src/cart/Dockerfile --severity-threshold=high --json-file-output=snyk-container.json
+
+      - name: Upload Snyk report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp snyk-container.json \
+            s3://${{ env.REPORT_BUCKET }}/snyk-reports/${GITHUB_SHA::7}/snyk-container-${TIMESTAMP}.json \
+            || echo "Snyk report upload skipped"
+
+      - name: Evaluate scan findings
+        id: evaluate
+        if: always()
+        run: |
+          FOUND=false
+          for outcome in "${{ steps.trivy-fs.outcome }}" "${{ steps.snyk-sca.outcome }}" "${{ steps.trivy-image.outcome }}" "${{ steps.snyk-container.outcome }}"; do
+            if [ "$outcome" = "failure" ]; then
+              FOUND=true
+            fi
+          done
+          echo "findings=$FOUND" >> "$GITHUB_OUTPUT"
+          echo "HIGH/CRITICAL findings detected: $FOUND"
+
+      - name: Tag and push Docker images
+        run: |
+          docker tag $IMAGE_BASE:$SHA_TAG $IMAGE_BASE:latest
           for tag in $TAGS; do
             IMAGE_URI="$IMAGE_BASE:$tag"
-            echo "Building and pushing $IMAGE_URI"
-            docker build -t $IMAGE_URI src/cart
+            echo "Pushing $IMAGE_URI"
             docker push $IMAGE_URI
           done
 
+  # ==============================================================
+  # Manual approval gate - only runs (and pauses for a reviewer)
+  # when the scan job found HIGH/CRITICAL issues. Configure the
+  # "security-approval" environment's required reviewers under
+  # Settings > Environments in this repo.
+  # ==============================================================
+  deploy-approval:
+    needs: scan-build-push
+    if: needs.scan-build-push.outputs.findings == 'true'
+    runs-on: ubuntu-latest
+    environment: security-approval
+    steps:
+      - name: Approval recorded
+        run: echo "Manual approval received - proceeding to deploy image despite HIGH/CRITICAL scan findings."
+
+  # ==============================================================
+  # Update the Helm chart to point at the new image - this is what
+  # actually triggers a rollout via GitOps, so it's the step that's
+  # gated behind manual approval when findings exist.
+  # ==============================================================
+  update-helm-values:
+    needs: [scan-build-push, deploy-approval]
+    if: |
+      always() &&
+      needs.scan-build-push.result == 'success' &&
+      (needs.deploy-approval.result == 'success' || needs.deploy-approval.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Git auth using GITHUB_TOKEN
         run: |
@@ -62,18 +209,15 @@ jobs:
 
       - name: Update Helm values file with new image tag
         run: |
-          cd src/ui
+          cd src/cart
           git config user.name "ci-bot"
           git config user.email "dercio.anselmo@gmail.com"
-          sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-ui.yaml
+          sed -i "s|^  tag: .*|  tag: sha-${GITHUB_SHA::7}|" chart/values-cart.yaml
           git diff --quiet || (
-            git add chart/values-ui.yaml
-            git commit -m "Update UI image tag to sha-${GITHUB_SHA::7}"
+            git add chart/values-cart.yaml
+            git commit -m "Update Cart image tag to sha-${GITHUB_SHA::7}"
             git push origin main
           )
 
-          
       - name: CI Complete
-        run: |
-          echo "Image push and Git update done"
-          echo "Tags used: $TAGS"
+        run: echo "Image push and Git update done"

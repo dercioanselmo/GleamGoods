@@ -1,0 +1,97 @@
+name: DAST - OWASP ZAP Staging Scan
+
+on:
+  workflow_run:
+    workflows:
+      - "Build and Push UI Service to ECR"
+      - "Build and Push Checkout Service to ECR"
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Service to scan"
+        type: choice
+        options: [ui, checkout]
+        required: true
+
+permissions:
+  id-token: write # Needed for OIDC (report upload)
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
+
+jobs:
+  dast:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine scan target
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NAME="${{ inputs.target }}"
+          else
+            case "${{ github.event.workflow_run.name }}" in
+              "Build and Push UI Service to ECR") NAME="ui" ;;
+              "Build and Push Checkout Service to ECR") NAME="checkout" ;;
+              *) echo "Unrecognized source workflow: ${{ github.event.workflow_run.name }}"; exit 1 ;;
+            esac
+          fi
+
+          if [ "$NAME" = "ui" ]; then
+            URL="${{ vars.STAGING_UI_URL }}"
+          else
+            URL="${{ vars.STAGING_CHECKOUT_URL }}"
+          fi
+
+          if [ -z "$URL" ]; then
+            echo "Repo variable for '$NAME' staging URL is not set (STAGING_UI_URL / STAGING_CHECKOUT_URL). Set it under Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
+
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for staging rollout to be ready
+        run: |
+          URL="${{ steps.target.outputs.url }}"
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null "$URL"; then
+              echo "Staging is responding at $URL"
+              exit 0
+            fi
+            echo "Waiting for $URL to become ready ($i/30)..."
+            sleep 20
+          done
+          echo "Staging did not become ready in time at $URL"
+          exit 1
+
+      # ==========================================================
+      # OWASP ZAP Baseline Scan (passive: spider + passive rules,
+      # safe to run against a live staging target)
+      # ==========================================================
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ steps.target.outputs.url }}
+          fail_action: true
+          cmd_options: '-a -J report_json.json -r report_html.html -w report_md.md'
+
+      - name: Configure AWS credentials via OIDC
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role-gleamgoods
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload ZAP report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          aws s3 cp report_json.json \
+            s3://${{ env.REPORT_BUCKET }}/zap-reports/${{ steps.target.outputs.name }}/${TIMESTAMP}.json \
+            || echo "ZAP report upload skipped"
