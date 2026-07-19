@@ -10,7 +10,8 @@ on:
     paths:
       - "src/**"
   schedule:
-    # Catch newly-published CodeQL query/CVE coverage even with no code changes
+    # Catch newly-published CodeQL query/CVE coverage even with no code changes.
+    # Runs the full matrix regardless of what changed.
     - cron: '0 6 * * 1'
 
 permissions:
@@ -24,33 +25,63 @@ env:
   REPORT_BUCKET: ${{ vars.REPORT_BUCKET }}
 
 jobs:
+  # ==============================================================
+  # Work out which service(s) actually changed and build a matrix
+  # containing only those - on push/PR we don't want to re-analyze
+  # all 5 services just because one changed. Schedule runs always
+  # analyzes everything to catch drift/newly-published queries.
+  # ==============================================================
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ui: 'src/ui/**'
+            catalog: 'src/catalog/**'
+            cart: 'src/cart/**'
+            checkout: 'src/checkout/**'
+            orders: 'src/orders/**'
+
+      - name: Build matrix
+        id: build-matrix
+        run: |
+          ui='{"name":"ui","language":"java-kotlin","source-root":"src/ui","build-mode":"manual"}'
+          cart='{"name":"cart","language":"java-kotlin","source-root":"src/cart","build-mode":"manual"}'
+          orders='{"name":"orders","language":"java-kotlin","source-root":"src/orders","build-mode":"manual"}'
+          catalog='{"name":"catalog","language":"go","source-root":"src/catalog","build-mode":"autobuild"}'
+          checkout='{"name":"checkout","language":"javascript-typescript","source-root":"src/checkout","build-mode":"none"}'
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MATRIX=$(jq -c -n --argjson a "$ui" --argjson b "$cart" --argjson c "$orders" --argjson d "$catalog" --argjson e "$checkout" '[$a,$b,$c,$d,$e]')
+          else
+            MATRIX='[]'
+            [ "${{ steps.filter.outputs.ui }}" = "true" ] && MATRIX=$(echo "$MATRIX" | jq -c --argjson x "$ui" '. + [$x]')
+            [ "${{ steps.filter.outputs.cart }}" = "true" ] && MATRIX=$(echo "$MATRIX" | jq -c --argjson x "$cart" '. + [$x]')
+            [ "${{ steps.filter.outputs.orders }}" = "true" ] && MATRIX=$(echo "$MATRIX" | jq -c --argjson x "$orders" '. + [$x]')
+            [ "${{ steps.filter.outputs.catalog }}" = "true" ] && MATRIX=$(echo "$MATRIX" | jq -c --argjson x "$catalog" '. + [$x]')
+            [ "${{ steps.filter.outputs.checkout }}" = "true" ] && MATRIX=$(echo "$MATRIX" | jq -c --argjson x "$checkout" '. + [$x]')
+          fi
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Services to analyze: $MATRIX"
+
   analyze:
+    needs: changes
+    if: needs.changes.outputs.matrix != '[]'
     name: Analyze (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: ui
-            language: java-kotlin
-            source-root: src/ui
-            build-mode: manual
-          - name: cart
-            language: java-kotlin
-            source-root: src/cart
-            build-mode: manual
-          - name: orders
-            language: java-kotlin
-            source-root: src/orders
-            build-mode: manual
-          - name: catalog
-            language: go
-            source-root: src/catalog
-            build-mode: autobuild
-          - name: checkout
-            language: javascript-typescript
-            source-root: src/checkout
-            build-mode: none
+        include: ${{ fromJson(needs.changes.outputs.matrix) }}
 
     steps:
       - name: Checkout code
