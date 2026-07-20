@@ -18,17 +18,17 @@ spec:
   strategy:
     canary:
       steps:
-        - setWeight: 50
-        - pause: {}
-#        - setWeight: 40
-#        - pause: {duration: 10s}
-#        - setWeight: 60
-#        - pause: {duration: 10s}
-#        - setWeight: 80
-#        - pause: {duration: 10s}
-#        - setWeight: 100
-#      maxSurge: 1
-#      maxUnavailable: 0
+        - setWeight: 20
+        - pause: {duration: 60s}
+        - setWeight: 40
+        - pause: {duration: 10s}
+        - setWeight: 60
+        - pause: {duration: 10s}
+        - setWeight: 80
+        - pause: {duration: 10s}
+        - setWeight: 100
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       {{- if or .Values.podAnnotations .Values.metrics.enabled }}
