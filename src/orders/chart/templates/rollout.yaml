@@ -65,12 +65,23 @@ spec:
             - secretRef:
                 name: {{ .Values.app.messaging.rabbitmq.secret.name }}
             {{- end }}
-            {{- if (eq "postgres" .Values.app.persistence.provider) }}
+            {{- if and (eq "postgres" .Values.app.persistence.provider) (not .Values.app.persistence.secret.useSecretsManager) }}
             - secretRef:
                 name: {{ .Values.app.persistence.secret.name }}
             {{- end }}
             - configMapRef:
                 name: {{ include "orders.configMapName" . }}
+          {{- if and (eq .Values.app.persistence.provider "postgres") .Values.app.persistence.secret.useSecretsManager }}
+          # DB credentials are read from the CSI-mounted Secrets Manager files
+          # below and exported at startup - no Kubernetes Secret object is
+          # created for them, so `kubectl get secrets` has nothing to return.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export RETAIL_ORDERS_PERSISTENCE_USERNAME=$(cat /mnt/secrets-store/username)
+              export RETAIL_ORDERS_PERSISTENCE_PASSWORD=$(cat /mnt/secrets-store/password)
+              exec java $JAVA_OPTS -jar /app/app.jar
+          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

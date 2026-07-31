@@ -56,10 +56,21 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "catalog.configMapName" . }}
-            {{- if (eq "mysql" .Values.app.persistence.provider) }}
+            {{- if and (eq "mysql" .Values.app.persistence.provider) (not .Values.app.persistence.secret.useSecretsManager) }}
             - secretRef:
                 name: {{ .Values.app.persistence.secret.name }}
             {{- end }}
+          {{- if and (eq .Values.app.persistence.provider "mysql") .Values.app.persistence.secret.useSecretsManager }}
+          # DB credentials are read from the CSI-mounted Secrets Manager files
+          # below and exported at startup - no Kubernetes Secret object is
+          # created for them, so `kubectl get secrets` has nothing to return.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export RETAIL_CATALOG_PERSISTENCE_USER=$(cat /mnt/secrets-store/username)
+              export RETAIL_CATALOG_PERSISTENCE_PASSWORD=$(cat /mnt/secrets-store/password)
+              exec /app/main
+          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
