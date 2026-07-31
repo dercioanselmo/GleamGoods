@@ -17,10 +17,6 @@ A microservices-based GleamGoods application. Each service is independently depl
 Infrastructure as code (Terraform) and Kubernetes manifests for deploying this project are maintained in a separate repository:
 [GleamGoods-DevOps](https://github.com/dercioanselmo/GleamGoods-DevOps)
 
-## CI/CD
-
-Build, scan, and deploy pipelines live in `.github/workflows/`. See [CICD.md](./CICD.md) for the full technical breakdown, including the security scanning (SCA, container scanning, SAST, DAST) and the approval-gate architecture.
-
 ## Running localy
 
 Each service includes a `docker-compose.yml` for local development. Refer to each service's README for specific instructions.
