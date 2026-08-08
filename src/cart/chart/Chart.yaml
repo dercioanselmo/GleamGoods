@@ -1,7 +1,7 @@
 apiVersion: v2
 name: glramgoods-cart-chart
 description: >-
-  A Helm chart for the AWS retail store containers sample application carts
+  A Helm chart for the AWS gleamgoods containers sample application carts
   service
 type: application
 version: 1.3.0
