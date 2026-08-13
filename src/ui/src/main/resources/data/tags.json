@@ -1,6 +1,6 @@
 [
-  { "name": "accessories", "displayName": "Accessories" },
-  { "name": "clothing", "displayName": "Clothing" },
-  { "name": "food", "displayName": "Food" },
-  { "name": "vehicles", "displayName": "Vehicles" }
+  { "name": "home", "displayName": "Home Automation" },
+  { "name": "energy", "displayName": "Energy" },
+  { "name": "industrial", "displayName": "Industrial IoT" },
+  { "name": "health", "displayName": "Health & Wellness" }
 ]
